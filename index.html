@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Taxi Map Test with Sample Data</title>
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<style>
+  body { margin: 0; font-family: Arial, sans-serif; background:#f0f0f0; }
+  header { background:#2c3e50; color:#fff; padding:15px; font-size:1.5em; text-align:center; font-weight:bold; }
+  #status { padding:10px; text-align:center; background:#ecf0f1; font-size:1em; margin-top:10px; min-height:24px; }
+  #radiusControl {
+    position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+    background: rgba(255,255,255,0.95);
+    padding:10px 20px; border-radius:10px;
+    display:flex; flex-direction: column; align-items:center;
+    z-index:999; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    max-width: 90vw;
+  }
+  #radiusLabel { font-size:1em; margin-bottom:4px; }
+  #radiusSlider { width: 80vw; max-width: 300px; }
+  #radiusValue { margin-top:4px; font-weight:bold; font-size:1.2em; }
+  #countDisplay { margin-top:8px; font-weight:bold; font-size:1.1em; color:#2c3e50; }
+  #map { height: calc(100vh - 200px); width: 100%; margin-top:20px; }
+  #refreshBtn {
+    margin-top:8px; padding:8px 16px; background:#2980b9; color:#fff;
+    border:none; border-radius:5px; cursor:pointer; font-size:1em;
+    box-shadow:0 2px 6px rgba(0,0,0,0.3);
+    transition: background-color 0.3s ease;
+  }
+  #refreshBtn:disabled {
+    background:#95a5a6;
+    cursor:not-allowed;
+    box-shadow:none;
+  }
+</style>
+</head>
+<body>
+
+<header>Test Map with Sample GeoJSON Data</header>
+<div id="status"></div>
+<div id="radiusControl" aria-label="Radius adjustment">
+  <div id="radiusLabel">Adjust Radius (km):</div>
+  <input type="range" id="radiusSlider" min="0.1" max="5" step="0.1" value="1" aria-describedby="radiusValue" />
+  <div id="radiusValue" aria-live="polite">1.0</div>
+  <div id="countDisplay" aria-live="polite">Taxis within 1.0 km: 0</div>
+  <button id="refreshBtn" type="button">Refresh Data</button>
+</div>
+
+<div id="map" role="region" aria-label="Taxi availability map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+  // Wrap in an async IIFE for easy async/await usage
+  (async () => {
+
+    // Initialize map centered on Singapore fallback location for now
+    const map = L.map('map').setView([1.3521, 103.8198], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // DOM elements
+    const statusEl = document.getElementById('status');
+    const radiusSlider = document.getElementById('radiusSlider');
+    const radiusValueEl = document.getElementById('radiusValue');
+    const countDisplayEl = document.getElementById('countDisplay');
+    const refreshBtn = document.getElementById('refreshBtn');
+
+    let userCoords = null;
+    let userMarker = null;
+    let radiusCircle = null;
+    let taxiGeoJsonLayer = null;
+
+    const sampleGeoJsonUrl = 'https://api.data.gov.sg/v1/transport/taxi-availability';
+
+    // SVG icon function for user location
+    function userSvgIcon() {
+      return `
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="10" fill="#e74c3c" stroke="#fff" stroke-width="2"/>
+        </svg>`;
+    }
+
+    /**
+     * Safely get user location with Promise, fallback if denied or timeout
+     */
+    function getUserLocation(timeoutMs = 10000) {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+          statusEl.textContent = 'Geolocation not supported by your browser, using default location.';
+          return resolve([1.3521, 103.8198]); // Singapore fallback
+        }
+
+        let resolved = false;
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            if (!resolved) {
+              resolved = true;
+              resolve([pos.coords.latitude, pos.coords.longitude]);
+            }
+          },
+          err => {
+            if (!resolved) {
+              statusEl.textContent = 'Geolocation permission denied or error, using default location.';
+              resolved = true;
+              resolve([1.3521, 103.8198]);
+            }
+          },
+          { enableHighAccuracy: true, timeout: timeoutMs }
+        );
+
+        // Timeout fallback
+        setTimeout(() => {
+          if (!resolved) {
+            statusEl.textContent = 'Geolocation timed out, using default location.';
+            resolved = true;
+            resolve([1.3521, 103.8198]);
+          }
+        }, timeoutMs + 1000);
+      });
+    }
+
+    /**
+     * Convert taxi availability API response into valid GeoJSON FeatureCollection
+     */
+    function parseTaxiAvailabilityToGeoJSON(data) {
+      if (!data.features || !data.features.length) return { type: 'FeatureCollection', features: [] };
+      const coords = data.features[0].geometry.coordinates;
+      // API coords are [lng, lat] pairs
+      const features = coords.map(([lng, lat]) => ({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [lng, lat]
+        },
+        properties: {}
+      }));
+      return { type: 'FeatureCollection', features };
+    }
+
+    /**
+     * Calculate distance between two lat/lng points in km (Haversine formula)
+     */
+    function distanceInKm(lat1, lon1, lat2, lon2) {
+      const R = 6371; // Earth radius in km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    /**
+     * Add or update user location marker on map
+     */
+    function addOrUpdateUserMarker(coords) {
+      if (userMarker) {
+        userMarker.setLatLng(coords);
+      } else {
+        userMarker = L.marker(coords, {
+          icon: L.divIcon({
+            html: userSvgIcon(),
+            iconSize: [40, 40],
+            iconAnchor: [20, 20]
+          }),
+          zIndexOffset: 1000
+        }).addTo(map).bindPopup('Your location');
+      }
+    }
+
+    /**
+     * Update radius circle and count taxis within radius
+     */
+    function updateRadius(radiusKm) {
+      radiusValueEl.textContent = radiusKm.toFixed(1);
+      if (!userCoords) return;
+      if (radiusCircle) {
+        map.removeLayer(radiusCircle);
+        radiusCircle = null;
+      }
+      radiusCircle = L.circle(userCoords, {
+        radius: radiusKm * 1000,
+        color: 'blue',
+        fillOpacity: 0.15,
+        weight: 2
+      }).addTo(map);
+
+      let count = 0;
+      if (taxiGeoJsonLayer) {
+        taxiGeoJsonLayer.eachLayer(layer => {
+          if (layer.getLatLng) {
+            const ll = layer.getLatLng();
+            const dist = distanceInKm(userCoords[0], userCoords[1], ll.lat, ll.lng);
+            if (dist <= radiusKm) count++;
+          }
+        });
+      }
+      countDisplayEl.textContent = `Taxis within ${radiusKm.toFixed(1)} km: ${count}`;
+    }
+
+    /**
+     * Fetch taxi data, parse, add to map, and update count & radius circle
+     */
+    async function fetchData() {
+      if (!userCoords) {
+        statusEl.textContent = 'Waiting for user location...';
+        return;
+      }
+      refreshBtn.disabled = true;
+      statusEl.textContent = 'Loading taxi data...';
+
+      try {
+        const res = await fetch(sampleGeoJsonUrl);
+        if (!res.ok) throw new Error(`Network error: ${res.status}`);
+        const rawData = await res.json();
+
+        if (taxiGeoJsonLayer) {
+          map.removeLayer(taxiGeoJsonLayer);
+          taxiGeoJsonLayer = null;
+        }
+
+        const geojson = parseTaxiAvailabilityToGeoJSON(rawData);
+
+        taxiGeoJsonLayer = L.geoJSON(geojson, {
+          pointToLayer: (feature, latlng) => {
+            return L.circleMarker(latlng, {
+              radius: 8,
+              fillColor: '#f1c40f', // bright yellow
+              color: '#e67e22',     // darker orange border
+              weight: 2,
+              opacity: 1,
+              fillOpacity: 0.9
+            });
+          },
+          onEachFeature: (feature, layer) => {
+            layer.bindPopup('Taxi available');
+          }
+        }).addTo(map);
+
+        // Fit map bounds to include all taxis and user location if possible
+        const taxiBounds = taxiGeoJsonLayer.getBounds();
+        if (taxiBounds.isValid()) {
+          map.fitBounds(taxiBounds.pad(0.2));
+        }
+        // Fly to user location after short delay for better UX
+        setTimeout(() => {
+          map.flyTo(userCoords, 16, { duration: 1.5 });
+          addOrUpdateUserMarker(userCoords);
+          updateRadius(parseFloat(radiusSlider.value));
+        }, 500);
+
+        statusEl.textContent = `Data loaded. Showing ${geojson.features.length} taxis.`;
+
+      } catch (err) {
+        statusEl.textContent = `Error loading data: ${err.message}`;
+        console.error(err);
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    }
+
+    /**
+     * Initialize app: get location, setup handlers, initial fetch
+     */
+    async function init() {
+      statusEl.textContent = 'Getting user location...';
+      userCoords = await getUserLocation();
+      addOrUpdateUserMarker(userCoords);
+      map.setView(userCoords, 13);
+      statusEl.textContent = '';
+      updateRadius(parseFloat(radiusSlider.value));
+
+      refreshBtn.addEventListener('click', () => {
+        fetchData();
+      });
+
+      radiusSlider.addEventListener('input', (e) => {
+        const radiusKm = parseFloat(e.target.value);
+        updateRadius(radiusKm);
+      });
+
+      // Initial load
+      fetchData();
+    }
+
+    // Start the app
+    init();
+
+  })();
+</script>
+
+</body>
+</html>

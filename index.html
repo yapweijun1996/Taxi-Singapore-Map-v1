@@ -1,619 +1,589 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Real-Time Taxi Availability Map Singapore | Taxi Locator</title>
-<meta name="description" content="View real-time taxi availability in Singapore on an interactive map. Adjust radius to find taxis near your location. Updated every 3 minutes." />
-<meta name="author" content="Your Company or Your Name" />
-
-<!-- Social Meta Tags for sharing -->
-<meta property="og:title" content="Real-Time Taxi Availability Singapore" />
-<meta property="og:description" content="View real-time taxi availability in Singapore on an interactive map." />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://yourdomain.com/taxi-map" />
-<meta property="og:image" content="https://yourdomain.com/images/taxi-map-preview.png" />
-
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="Real-Time Taxi Availability Singapore" />
-<meta name="twitter:description" content="View real-time taxi availability in Singapore on an interactive map." />
-<meta name="twitter:image" content="https://yourdomain.com/images/taxi-map-preview.png" />
-
-<!-- Leaflet CSS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-
-<style>
-  /* Basic reset and typography */
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-      Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-    background: #f9fafb;
-    color: #2c3e50;
-    line-height: 1.5;
-  }
-  header {
-    background: #2c3e50;
-    color: #ecf0f1;
-    padding: 15px 10px;
-    font-size: 1.75em;
-    font-weight: 700;
-    text-align: center;
-    user-select: none;
-  }
-  main {
-    max-width: 1024px;
-    margin: 1rem auto;
-    padding: 0 1rem 4rem;
-  }
-  p.description {
-    font-size: 1rem;
-    max-width: 700px;
-    margin: 0.5rem auto 2rem auto;
-    color: #34495e;
-    text-align: center;
-  }
-
-  /* Status bar */
-  #status {
-    background: #ecf0f1;
-    color: #34495e;
-    text-align: center;
-    font-size: 1rem;
-    padding: 8px 12px;
-    border-radius: 6px;
-    margin: 0 auto 1rem;
-    max-width: 400px;
-    min-height: 24px;
-    user-select: none;
-  }
-  #status.error {
-    background: #f9e2e2;
-    color: #c0392b;
-  }
-  #status.success {
-    background: #d2f0d2;
-    color: #27ae60;
-  }
-  #status.info {
-    background: #dbe6f6;
-    color: #2980b9;
-  }
-
-  /* Radius control panel */
-  #radiusControl {
-    position: fixed;
-    top: 70px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(255 255 255 / 0.95);
-    box-shadow: 0 4px 15px rgb(0 0 0 / 0.12);
-    border-radius: 12px;
-    padding: 14px 24px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    font-weight: 600;
-    z-index: 9999;
-    max-width: 90vw;
-    width: 320px;
-    user-select: none;
-  }
-  #radiusLabel {
-    font-size: 1rem;
-    margin-bottom: 6px;
-  }
-  #radiusSlider {
-    width: 100%;
-    cursor: pointer;
-    -webkit-appearance: none;
-    height: 8px;
-    border-radius: 6px;
-    background: linear-gradient(90deg, #2980b9 0%, #2980b9 50%, #d1d5db 50%, #d1d5db 100%);
-    transition: background 450ms ease-in;
-    outline: none;
-  }
-  #radiusSlider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 22px;
-    height: 22px;
-    background: #2980b9;
-    cursor: pointer;
-    border-radius: 50%;
-    border: 2px solid white;
-    box-shadow: 0 0 5px rgba(41, 128, 185, 0.6);
-    transition: background 0.3s ease;
-    margin-top: -7px;
-  }
-  #radiusSlider::-moz-range-thumb {
-    width: 22px;
-    height: 22px;
-    background:#2980b9;
-    cursor:pointer;
-    border-radius: 50%;
-    border: 2px solid white;
-    box-shadow: 0 0 5px rgba(41, 128, 185, 0.6);
-    transition: background 0.3s ease;
-  }
-  #radiusSlider:active::-webkit-slider-thumb {
-    background: #1f618d;
-  }
-  #radiusSlider:focus-visible {
-    outline: 2px solid #2980b9;
-  }
-
-  #radiusValue {
-    margin-top: 6px;
-    font-weight: 700;
-    font-size: 1.25rem;
-    color: #2c3e50;
-    user-select: text;
-  }
-  #countDisplay {
-    margin-top: 6px;
-    font-weight: 700;
-    font-size: 1.1rem;
-    color: #2c3e50;
-    text-align: center;
-  }
-  #refreshBtn {
-    margin-top: 12px;
-    padding: 10px 22px;
-    background: #2980b9;
-    color: white;
-    border: none;
-    border-radius: 7px;
-    font-weight: 700;
-    font-size: 1rem;
-    cursor: pointer;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.2);
-    user-select: none;
-    position: relative;
-  }
-  #refreshBtn:disabled {
-    background: #95a5a6;
-    cursor: not-allowed;
-    box-shadow: none;
-  }
-  #refreshBtn:focus-visible {
-    outline: 3px solid #2471a3;
-    outline-offset: 2px;
-  }
-  /* Spinner inside button */
-  #refreshBtn.loading::after {
-    content: "";
-    border: 3px solid #fff;
-    border-top: 3px solid rgba(255, 255, 255, 0.4);
-    border-radius: 50%;
-    width: 18px;
-    height: 18px;
-    animation: spin 1s linear infinite;
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  /* Map container */
-  #map {
-    height: calc(100vh - 160px);
-    width: 100%;
-    border-radius: 12px;
-    max-width: 1024px;
-    margin: 0 auto 3rem;
-    box-shadow: 0 4px 18px rgb(0 0 0 / 0.15);
-  }
-
-  /* Legend box */
-  #legend {
-    max-width: 1024px;
-    margin: 0 auto 1rem;
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 24px;
-    color: #34495e;
-    user-select: none;
-  }
-  #legend div {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .circle-legend {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    display: inline-block;
-  }
-  #user-circle {
-    background: #e74c3c;
-    border: 2px solid #fff;
-    box-shadow: 0 0 6px rgba(231, 76, 60, 0.7);
-    animation: pulse 2.5s ease-out infinite alternate;
-  }
-  #taxi-circle {
-    background: #f1c40f;
-    border: 2px solid #e67e22;
-    box-shadow: 0 0 8px rgba(241, 196, 15, 0.8);
-  }
-
-  /* Pulse animation for user marker legend */
-  @keyframes pulse {
-    0% {
-      box-shadow: 0 0 4px 1.5px rgba(231, 76, 60, 0.9);
-    }
-    100% {
-      box-shadow: 0 0 12px 5px rgba(231, 76, 60, 0.3);
-    }
-  }
-
-  /* Tooltip styling (Leaflet overrides if needed) */
-  .leaflet-tooltip.my-tooltip {
-    background: #2c3e50;
-    border-radius: 4px;
-    color: #ecf0f1;
-    font-weight: 600;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  }
-
-  /* Pulsing effect for user location marker on map */
-  .pulse-marker {
-    animation: pulse 2.5s ease-out infinite alternate;
-  }
-
-  /* Responsive adjustments */
-  @media (max-width: 460px) {
-    #radiusControl {
-      width: 90vw;
-      top: 60px;
-      padding: 12px 18px;
-    }
-    #radiusLabel {
-      font-size: 0.9rem;
-    }
-    #radiusValue {
-      font-size: 1.1rem;
-    }
-    #countDisplay {
-      font-size: 1rem;
-    }
-    #refreshBtn {
-      font-size: 0.9rem;
-      padding: 8px 14px;
-    }
-  }
-</style>
-</head>
-
-<body>
-<header role="banner">
-  Real-Time Taxi Availability Map - Singapore
-</header>
-
-<main role="main" tabindex="-1">
-  <p class="description" id="intro-text">
-    Explore real-time taxi availability around you in Singapore.
-    Adjust the radius slider to find taxis near your location.
-  </p>
-
-  <div id="status" role="alert" aria-live="polite"></div>
-
-  <section id="radiusControl" aria-label="Adjust search radius">
-    <label for="radiusSlider" id="radiusLabel">Adjust Radius (km):</label>
-    <input
-      type="range"
-      id="radiusSlider"
-      min="0.1"
-      max="5"
-      step="0.1"
-      value="1"
-      aria-labelledby="radiusLabel radiusValue"
-      aria-valuemin="0.1"
-      aria-valuemax="5"
-      aria-valuenow="1"
-      role="slider"
-    />
-    <div id="radiusValue" aria-live="polite" aria-atomic="true">1.0</div>
-    <div id="countDisplay" aria-live="polite" aria-atomic="true">Taxis within 1.0 km: 0</div>
-    <button id="refreshBtn" type="button" aria-live="polite" aria-atomic="true" aria-label="Refresh taxi data">
-      Refresh Data
-    </button>
-  </section>
-
-  <div id="legend" aria-label="Map Legend">
-    <div><span class="circle-legend" id="user-circle" aria-hidden="true"></span> Your Location</div>
-    <div><span class="circle-legend" id="taxi-circle" aria-hidden="true"></span> Available Taxis</div>
-  </div>
-
-  <div id="map" role="region" aria-label="Interactive map showing taxi availability"></div>
-
-  <p id="lastUpdated" style="text-align:center; font-size:0.85rem; color:#64748b; user-select:none;"></p>
-
-</main>
-
-<!-- Leaflet JS loaded without defer to ensure 'L' is available -->
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-<script>
-  (async () => {
-    const statusEl = document.getElementById('status');
-    const radiusSlider = document.getElementById('radiusSlider');
-    const radiusValueEl = document.getElementById('radiusValue');
-    const countDisplayEl = document.getElementById('countDisplay');
-    const refreshBtn = document.getElementById('refreshBtn');
-    const lastUpdatedEl = document.getElementById('lastUpdated');
-
-    let userCoords = null;
-    let userMarker = null;
-    let radiusCircle = null;
-    let taxiGeoJsonLayer = null;
-    let allTaxiFeatures = null; // Keep all fetched taxis in memory
-
-    const sampleGeoJsonUrl = 'https://api.data.gov.sg/v1/transport/taxi-availability';
-
-    // Initialize the Leaflet map now that L is defined
-    const map = L.map('map');
-
-    // Add OSM tile layer
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    // Create a divIcon for user location with pulsing CSS class
-    function userIcon() {
-      return L.divIcon({
-        className: 'pulse-marker',
-        html: `<svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" 
-        xmlns="http://www.w3.org/2000/svg" role="img" focusable="false">
-          <circle cx="12" cy="12" r="10" fill="#e74c3c" stroke="#fff" stroke-width="2"/>
-        </svg>`,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20],
-        popupAnchor: [0, -20],
-      });
-    }
-
-    // Helper: Haversine formula to calculate distance in km between two lat-lng points
-    function distanceInKm(lat1, lon1, lat2, lon2) {
-      const R = 6371;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) ** 2;
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return R * c;
-    }
-
-    // Converts taxi API data to GeoJSON FeatureCollection format
-    function parseTaxiAvailabilityToGeoJSON(data) {
-      if (!data.features || !data.features.length) return { type: 'FeatureCollection', features: [] };
-      const coords = data.features[0].geometry.coordinates;
-      return {
-        type: 'FeatureCollection',
-        features: coords.map(([lng, lat]) => ({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [lng, lat] },
-          properties: {}
-        }))
-      };
-    }
-
-    // Get user location with timeout & fallback
-    function getUserLocation(timeoutMs = 10000) {
-      return new Promise(resolve => {
-        if (!navigator.geolocation) {
-          statusEl.textContent = 'Geolocation not supported. Defaulting to Singapore center.';
-          resolve([1.3521, 103.8198]);
-          return;
-        }
-        let resolved = false;
-        navigator.geolocation.getCurrentPosition(
-          pos => {
-            if (!resolved) {
-              resolved = true;
-              resolve([pos.coords.latitude, pos.coords.longitude]);
-            }
-          },
-          () => {
-            if (!resolved) {
-              statusEl.textContent = 'Geolocation denied or unavailable. Defaulting to Singapore center.';
-              resolved = true;
-              resolve([1.3521, 103.8198]);
-            }
-          },
-          { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }
-        );
-        setTimeout(() => {
-          if (!resolved) {
-            statusEl.textContent = 'Geolocation timeout. Defaulting to Singapore center.';
-            resolved = true;
-            resolve([1.3521, 103.8198]);
-          }
-        }, timeoutMs + 1000);
-      });
-    }
-
-    // Add or update user marker to map
-    function addOrUpdateUserMarker(coords) {
-      if (!coords) return;
-      if (userMarker) {
-        userMarker.setLatLng(coords);
-      } else {
-        userMarker = L.marker(coords, { icon: userIcon(), zIndexOffset: 1000 })
-                      .addTo(map)
-                      .bindPopup('Your location');
-        userMarker.on('popupopen', () => {
-          userMarker.getPopup().getElement().setAttribute('role', 'dialog');
-        });
-      }
-    }
-
-    // Filter taxi geojson features by distance inside radius from userCoords
-    function filterTaxisWithinRadius(radiusKm) {
-      if (!allTaxiFeatures || !userCoords) return { type: "FeatureCollection", features: [] };
-
-      const filteredFeatures = allTaxiFeatures.features.filter(feature => {
-        const [lng, lat] = feature.geometry.coordinates;
-        const dist = distanceInKm(userCoords[0], userCoords[1], lat, lng);
-        return dist <= radiusKm;
-      });
-
-      return {
-        type: "FeatureCollection",
-        features: filteredFeatures,
-      };
-    }
-
-    // Update the taxi markers on the map filtered by radius
-    function updateTaxiLayer(radiusKm) {
-      if (taxiGeoJsonLayer) {
-        map.removeLayer(taxiGeoJsonLayer);
-        taxiGeoJsonLayer = null;
-      }
-      const filteredGeoJSON = filterTaxisWithinRadius(radiusKm);
-
-      taxiGeoJsonLayer = L.geoJSON(filteredGeoJSON, {
-        pointToLayer: (feature, latlng) => {
-          return L.circleMarker(latlng, {
-            radius: 8,
-            fillColor: '#f1c40f',
-            color: '#e67e22',
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.9,
-          });
-        },
-        onEachFeature: (feature, layer) => {
-          layer.bindPopup('Taxi available');
-        }
-      }).addTo(map);
-
-      // Update count display
-      countDisplayEl.textContent = `Taxis within ${radiusKm.toFixed(1)} km: ${filteredGeoJSON.features.length}`;
-    }
-
-    // Update radius circle overlay and refresh markers
-    function updateRadius(radiusKm) {
-      radiusValueEl.textContent = radiusKm.toFixed(1);
-      radiusSlider.setAttribute('aria-valuenow', radiusKm.toFixed(1));
-      if (!userCoords) return;
-
-      if (radiusCircle) {
-        map.removeLayer(radiusCircle);
-        radiusCircle = null;
-      }
-
-      radiusCircle = L.circle(userCoords, {
-        radius: radiusKm * 1000,
-        color: '#2980b9',
-        fillColor: '#2980b9',
-        fillOpacity: 0.15,
-        weight: 2,
-        interactive: false,
-      }).addTo(map);
-
-      updateTaxiLayer(radiusKm);
-    }
-
-    // Fetch taxi availability, store all points, and update map
-    async function fetchData() {
-      if (!userCoords) {
-        statusEl.textContent = 'Waiting for user location...';
-        return;
-      }
-      refreshBtn.disabled = true;
-      refreshBtn.classList.add('loading');
-      statusEl.textContent = 'Loading taxi data...';
-      statusEl.className = 'info';
-
-      try {
-        const response = await fetch(sampleGeoJsonUrl, { cache: "no-store" });
-        if (!response.ok) throw new Error(`Network error: ${response.status}`);
-
-        const rawData = await response.json();
-
-        allTaxiFeatures = parseTaxiAvailabilityToGeoJSON(rawData);
-
-        // Auto fly to user location at zoom 16
-        map.flyTo(userCoords, 16, { duration: 1.5 });
-
-        // Update taxi markers filtered by current radius
-        const currentRadius = parseFloat(radiusSlider.value);
-        updateTaxiLayer(currentRadius);
-
-        // Update user marker and radius circle
-        addOrUpdateUserMarker(userCoords);
-        if (radiusCircle) map.removeLayer(radiusCircle);
-        radiusCircle = L.circle(userCoords, {
-          radius: currentRadius * 1000,
-          color: '#2980b9',
-          fillColor: '#2980b9',
-          fillOpacity: 0.15,
-          weight: 2,
-          interactive: false,
-        }).addTo(map);
-
-        // Show success status & last updated timestamp
-        statusEl.textContent = 'Taxi data loaded successfully.';
-        statusEl.className = 'success';
-        lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
-
-      } catch (error) {
-        statusEl.textContent = `Error loading taxi data: ${error.message}`;
-        statusEl.className = 'error';
-        console.error(error);
-      } finally {
-        refreshBtn.disabled = false;
-        refreshBtn.classList.remove('loading');
-      }
-    }
-
-    // Initialization sequence
-    async function init() {
-      statusEl.textContent = 'Getting your location...';
-      statusEl.className = 'info';
-      userCoords = await getUserLocation();
-
-      addOrUpdateUserMarker(userCoords);
-      map.setView(userCoords, 13);
-      statusEl.textContent = '';
-      updateRadius(parseFloat(radiusSlider.value));
-
-      // Event listeners
-      refreshBtn.addEventListener('click', () => fetchData());
-      radiusSlider.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        updateRadius(val);
-      });
-
-      // First data fetch
-      await fetchData();
-
-      // Auto refresh every 3 minutes (180000 ms)
-      setInterval(fetchData, 180000);
-
-      // On initial load - optional onboarding alert (simple)
-      if (!sessionStorage.getItem('taxiMapOnboarded')) {
-        alert('Use the slider to adjust the search radius and find available taxis near you. Click Refresh Data to update manually.');
-        sessionStorage.setItem('taxiMapOnboarded', 'true');
-      }
-    }
-
-    // Kickoff
-    init();
-
-  })();
-</script>
-
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Real-Time Taxi Availability Map Singapore | Taxi Locator</title>
+		<meta name="description" content="View real-time taxi availability in Singapore on an interactive map. Adjust radius to find taxis near your location. Updated every 3 minutes." />
+		<meta name="author" content="Your Company or Your Name" />
+		
+		<!-- Social Meta Tags for sharing -->
+		<meta property="og:title" content="Real-Time Taxi Availability Singapore" />
+		<meta property="og:description" content="View real-time taxi availability in Singapore on an interactive map." />
+		<meta property="og:type" content="website" />
+		<meta property="og:url" content="https://yourdomain.com/taxi-map" />
+		<meta property="og:image" content="https://yourdomain.com/images/taxi-map-preview.png" />
+		
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content="Real-Time Taxi Availability Singapore" />
+		<meta name="twitter:description" content="View real-time taxi availability in Singapore on an interactive map." />
+		<meta name="twitter:image" content="https://yourdomain.com/images/taxi-map-preview.png" />
+		
+		<!-- Leaflet CSS -->
+		<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+		
+		<style>
+			/* Reset and typography */
+			body {
+				margin: 0;
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+				Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+				background: #f9fafb;
+				color: #2c3e50;
+				line-height: 1.5;
+			}
+			header {
+				background: #2c3e50;
+				color: #ecf0f1;
+				padding: 15px 10px;
+				font-size: 1.75em;
+				font-weight: 700;
+				text-align: center;
+				user-select: none;
+			}
+			main {
+				max-width: 1024px;
+				margin: 1rem auto;
+				padding: 0 1rem 4rem;
+			}
+			p.description {
+				font-size: 1rem;
+				max-width: 700px;
+				margin: 0.5rem auto 2rem auto;
+				color: #34495e;
+				text-align: center;
+			}
+			
+			/* Status bar */
+			#status {
+				background: #ecf0f1;
+				color: #34495e;
+				text-align: center;
+				font-size: 1rem;
+				padding: 8px 12px;
+				border-radius: 6px;
+				margin: 0 auto 1rem;
+				max-width: 400px;
+				min-height: 24px;
+				user-select: none;
+			}
+			#status.error {
+				background: #f9e2e2;
+				color: #c0392b;
+			}
+			#status.success {
+				background: #d2f0d2;
+				color: #27ae60;
+			}
+			#status.info {
+				background: #dbe6f6;
+				color: #2980b9;
+			}
+			
+			/* Radius control panel */
+			#radiusControl {
+				margin: 30px auto;
+				width: 320px;
+				max-width: 90vw;
+				background: rgba(255 255 255 / 0.95);
+				box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+				border-radius: 12px;
+				padding: 14px 24px;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				font-weight: 600;
+				z-index: 9999;
+				user-select: none;
+				box-sizing: border-box;
+				transition: all 0.3s ease;
+			}
+			#radiusLabel {
+				font-size: 1rem;
+				margin-bottom: 6px;
+			}
+			#radiusSlider {
+				width: 100%;
+				cursor: pointer;
+				-webkit-appearance: none;
+				height: 8px;
+				border-radius: 6px;
+				background: linear-gradient(90deg, #2980b9 0%, #2980b9 50%, #d1d5db 50%, #d1d5db 100%);
+				transition: background 450ms ease-in;
+				outline: none;
+			}
+			#radiusSlider::-webkit-slider-thumb {
+				-webkit-appearance: none;
+				appearance: none;
+				width: 22px;
+				height: 22px;
+				background: #2980b9;
+				cursor: pointer;
+				border-radius: 50%;
+				border: 2px solid white;
+				box-shadow: 0 0 5px rgba(41, 128, 185, 0.6);
+				transition: background 0.3s ease;
+				margin-top: -7px;
+			}
+			#radiusSlider::-moz-range-thumb {
+				width: 22px;
+				height: 22px;
+				background:#2980b9;
+				cursor:pointer;
+				border-radius: 50%;
+				border: 2px solid white;
+				box-shadow: 0 0 5px rgba(41, 128, 185, 0.6);
+				transition: background 0.3s ease;
+			}
+			#radiusSlider:active::-webkit-slider-thumb {
+				background: #1f618d;
+			}
+			#radiusSlider:focus-visible {
+				outline: 2px solid #2980b9;
+			}
+			
+			#radiusValue {
+				margin-top: 6px;
+				font-weight: 700;
+				font-size: 1.25rem;
+				color: #2c3e50;
+				user-select: text;
+			}
+			#countDisplay {
+				margin-top: 6px;
+				font-weight: 700;
+				font-size: 1.1rem;
+				color: #2c3e50;
+				text-align: center;
+			}
+			#refreshBtn {
+				margin-top: 12px;
+				padding: 10px 22px;
+				background: #2980b9;
+				color: white;
+				border: none;
+				border-radius: 7px;
+				font-weight: 700;
+				font-size: 1rem;
+				cursor: pointer;
+				box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+				user-select: none;
+				position: relative;
+			}
+			#refreshBtn:disabled {
+				background: #95a5a6;
+				cursor: not-allowed;
+				box-shadow: none;
+			}
+			#refreshBtn:focus-visible {
+				outline: 3px solid #2471a3;
+				outline-offset: 2px;
+			}
+			/* Spinner inside button */
+			#refreshBtn.loading::after {
+				content: "";
+				border: 3px solid #fff;
+				border-top: 3px solid rgba(255, 255, 255, 0.4);
+				border-radius: 50%;
+				width: 18px;
+				height: 18px;
+				animation: spin 1s linear infinite;
+				position: absolute;
+				right: 12px;
+				top: 50%;
+				transform: translateY(-50%);
+			}
+			@keyframes spin {
+				to {
+					transform: rotate(360deg);
+				}
+			}
+			
+			/* Map container */
+			#map {
+				height: calc(100vh - 160px);
+				width: 100%;
+				border-radius: 12px;
+				max-width: 1024px;
+				margin: 0 auto 3rem;
+				box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15);
+			}
+			
+			/* Legend box */
+			#legend {
+				max-width: 1024px;
+				margin: 0 auto 1rem;
+				font-size: 0.9rem;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 24px;
+				color: #34495e;
+				user-select: none;
+			}
+			#legend div {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+			}
+			.circle-legend {
+				width: 18px;
+				height: 18px;
+				border-radius: 50%;
+				display: inline-block;
+			}
+			#user-circle {
+				background: #e74c3c;
+				border: 2px solid #fff;
+				box-shadow: 0 0 6px rgba(231, 76, 60, 0.7);
+				animation: pulse 2.5s ease-out infinite alternate;
+			}
+			#taxi-circle {
+				background: #f1c40f;
+				border: 2px solid #e67e22;
+				box-shadow: 0 0 8px rgba(241, 196, 15, 0.8);
+			}
+			
+			/* Pulse animation for user marker legend */
+			@keyframes pulse {
+				0% {
+					box-shadow: 0 0 4px 1.5px rgba(231, 76, 60, 0.9);
+				}
+				100% {
+					box-shadow: 0 0 12px 5px rgba(231, 76, 60, 0.3);
+				}
+			}
+			
+			/* Tooltip styling */
+			.leaflet-tooltip.my-tooltip {
+				background: #2c3e50;
+				border-radius: 4px;
+				color: #ecf0f1;
+				font-weight: 600;
+				box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+			}
+			
+			/* Pulsing effect for user location marker on map */
+			.pulse-marker {
+				animation: pulse 2.5s ease-out infinite alternate;
+			}
+			
+			/* Responsive adjustments */
+			@media (max-width: 600px) {
+				#radiusControl {
+					width: 90vw;
+					border-radius: 16px;
+					padding: 12px 18px;
+					background: rgba(255 255 255 / 0.9);
+					backdrop-filter: blur(8px);
+					box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+					font-size: 0.9rem;
+				}
+				#radiusLabel {
+					font-size: 0.9rem;
+					margin-bottom: 4px;
+				}
+				#radiusValue {
+					font-size: 1.1rem;
+					margin-top: 4px;
+				}
+				#countDisplay {
+					font-size: 1rem;
+					margin-top: 6px;
+				}
+				#refreshBtn {
+					margin-top: 8px;
+					width: 100%;
+					font-size: 0.9rem;
+					padding: 8px 14px;
+					box-sizing: border-box;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<header role="banner">
+			Real-Time Taxi Availability Map - Singapore
+		</header>
+		
+		<main role="main" tabindex="-1">
+			<p class="description" id="intro-text">
+				Explore real-time taxi availability around you in Singapore.
+				Adjust the radius slider to find taxis near your location.
+			</p>
+			
+			
+			<section id="radiusControl" aria-label="Adjust search radius">
+				<label for="radiusSlider" id="radiusLabel">Adjust Radius (km):</label>
+				<input type="range" id="radiusSlider" min="0.1" max="5" step="0.1" value="1"
+				aria-labelledby="radiusLabel radiusValue" aria-valuemin="0.1" aria-valuemax="5"
+				aria-valuenow="1" role="slider" />
+				<div id="radiusValue" aria-live="polite" aria-atomic="true">1.0</div>
+				<div id="countDisplay" aria-live="polite" aria-atomic="true">Taxis within 1.0 km: 0</div>
+				<button id="refreshBtn" type="button" aria-live="polite" aria-atomic="true"
+				aria-label="Refresh taxi data">Refresh Data</button>
+			</section>
+			<div id="status" role="alert" aria-live="polite"></div>
+			
+			<div id="legend" aria-label="Map Legend">
+				<div><span class="circle-legend" id="user-circle" aria-hidden="true"></span> Your Location</div>
+				<div><span class="circle-legend" id="taxi-circle" aria-hidden="true"></span> Available Taxis</div>
+			</div>
+			
+			<div id="map" role="region" aria-label="Interactive map showing taxi availability"></div>
+			
+			<p id="lastUpdated" style="text-align:center; font-size:0.85rem; color:#64748b; user-select:none;"></p>
+		</main>
+		
+		<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+		<script>
+			(async () => {
+				const statusEl = document.getElementById('status');
+				const radiusSlider = document.getElementById('radiusSlider');
+				const radiusValueEl = document.getElementById('radiusValue');
+				const countDisplayEl = document.getElementById('countDisplay');
+				const refreshBtn = document.getElementById('refreshBtn');
+				const lastUpdatedEl = document.getElementById('lastUpdated');
+				
+				let userCoords = null;
+				let userMarker = null;
+				let radiusCircle = null;
+				let taxiGeoJsonLayer = null;
+				let allTaxiFeatures = null;
+				
+				const sampleGeoJsonUrl = 'https://api.data.gov.sg/v1/transport/taxi-availability';
+				
+				const map = L.map('map');
+				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+					attribution: '&copy; OpenStreetMap contributors'
+				}).addTo(map);
+				
+				function userIcon() {
+					return L.divIcon({
+						className: 'pulse-marker',
+						html: `<svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24"
+						xmlns="http://www.w3.org/2000/svg" role="img" focusable="false">
+						<circle cx="12" cy="12" r="10" fill="#e74c3c" stroke="#fff" stroke-width="2"/>
+					</svg>`,
+					iconSize: [40, 40],
+					iconAnchor: [20, 20],
+					popupAnchor: [0, -20],
+				});
+			}
+			
+			function distanceInKm(lat1, lon1, lat2, lon2) {
+				const R = 6371;
+				const dLat = (lat2 - lat1) * Math.PI / 180;
+				const dLon = (lon2 - lon1) * Math.PI / 180;
+				const a =
+				Math.sin(dLat / 2) ** 2 +
+				Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+				Math.sin(dLon / 2) ** 2;
+				const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+				return R * c;
+			}
+			
+			function parseTaxiAvailabilityToGeoJSON(data) {
+				if (!data.features || !data.features.length) return { type: 'FeatureCollection', features: [] };
+				const coords = data.features[0].geometry.coordinates;
+				return {
+					type: 'FeatureCollection',
+					features: coords.map(([lng, lat]) => ({
+						type: 'Feature',
+						geometry: { type: 'Point', coordinates: [lng, lat] },
+						properties: {}
+					}))
+				};
+			}
+			
+			function getUserLocation(timeoutMs = 10000) {
+				return new Promise(resolve => {
+					if (!navigator.geolocation) {
+						statusEl.textContent = 'Geolocation not supported. Defaulting to Singapore center.';
+						resolve([1.3521, 103.8198]);
+						return;
+					}
+					let resolved = false;
+					navigator.geolocation.getCurrentPosition(
+					pos => {
+						if (!resolved) {
+							resolved = true;
+							resolve([pos.coords.latitude, pos.coords.longitude]);
+						}
+					},
+					() => {
+						if (!resolved) {
+							statusEl.textContent = 'Geolocation denied or unavailable. Defaulting to Singapore center.';
+							resolved = true;
+							resolve([1.3521, 103.8198]);
+						}
+					},
+					{ enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }
+					);
+					setTimeout(() => {
+						if (!resolved) {
+							statusEl.textContent = 'Geolocation timeout. Defaulting to Singapore center.';
+							resolved = true;
+							resolve([1.3521, 103.8198]);
+						}
+					}, timeoutMs + 1000);
+				});
+			}
+			
+			function addOrUpdateUserMarker(coords) {
+				if (!coords) return;
+				if (userMarker) {
+					userMarker.setLatLng(coords);
+				} else {
+					userMarker = L.marker(coords, { icon: userIcon(), zIndexOffset: 1000 })
+					.addTo(map)
+					.bindPopup('Your location');
+					userMarker.on('popupopen', () => {
+						userMarker.getPopup().getElement().setAttribute('role', 'dialog');
+					});
+				}
+			}
+			
+			function filterTaxisWithinRadius(radiusKm) {
+				if (!allTaxiFeatures || !userCoords) return { type: "FeatureCollection", features: [] };
+				
+				const filteredFeatures = allTaxiFeatures.features.filter(feature => {
+					const [lng, lat] = feature.geometry.coordinates;
+					const dist = distanceInKm(userCoords[0], userCoords[1], lat, lng);
+					return dist <= radiusKm;
+				});
+				
+				return {
+					type: "FeatureCollection",
+					features: filteredFeatures,
+				};
+			}
+			
+			function updateTaxiLayer(radiusKm) {
+				if (taxiGeoJsonLayer) {
+					map.removeLayer(taxiGeoJsonLayer);
+					taxiGeoJsonLayer = null;
+				}
+				const filteredGeoJSON = filterTaxisWithinRadius(radiusKm);
+				
+				taxiGeoJsonLayer = L.geoJSON(filteredGeoJSON, {
+					pointToLayer: (feature, latlng) => {
+						return L.circleMarker(latlng, {
+							radius: 8,
+							fillColor: '#f1c40f',
+							color: '#e67e22',
+							weight: 2,
+							opacity: 1,
+							fillOpacity: 0.9,
+						});
+					},
+					onEachFeature: (feature, layer) => {
+						layer.bindPopup('Taxi available');
+					}
+				}).addTo(map);
+				
+				countDisplayEl.textContent = `Taxis within ${radiusKm.toFixed(1)} km: ${filteredGeoJSON.features.length}`;
+			}
+			
+			function updateRadius(radiusKm) {
+				radiusValueEl.textContent = radiusKm.toFixed(1);
+				radiusSlider.setAttribute('aria-valuenow', radiusKm.toFixed(1));
+				if (!userCoords) return;
+				
+				if (radiusCircle) {
+					map.removeLayer(radiusCircle);
+					radiusCircle = null;
+				}
+				
+				radiusCircle = L.circle(userCoords, {
+					radius: radiusKm * 1000,
+					color: '#2980b9',
+					fillColor: '#2980b9',
+					fillOpacity: 0.15,
+					weight: 2,
+					interactive: false,
+				}).addTo(map);
+				
+				updateTaxiLayer(radiusKm);
+			}
+			
+			async function fetchData() {
+				if (!userCoords) {
+					statusEl.textContent = 'Waiting for user location...';
+					return;
+				}
+				refreshBtn.disabled = true;
+				refreshBtn.classList.add('loading');
+				statusEl.textContent = 'Loading taxi data...';
+				statusEl.className = 'info';
+				
+				try {
+					const response = await fetch(sampleGeoJsonUrl, { cache: "no-store" });
+					if (!response.ok) throw new Error(`Network error: ${response.status}`);
+					
+					const rawData = await response.json();
+					
+					allTaxiFeatures = parseTaxiAvailabilityToGeoJSON(rawData);
+					
+					map.flyTo(userCoords, 16, { duration: 1.5 });
+					
+					const currentRadius = parseFloat(radiusSlider.value);
+					updateTaxiLayer(currentRadius);
+					
+					addOrUpdateUserMarker(userCoords);
+					if (radiusCircle) map.removeLayer(radiusCircle);
+					radiusCircle = L.circle(userCoords, {
+						radius: currentRadius * 1000,
+						color: '#2980b9',
+						fillColor: '#2980b9',
+						fillOpacity: 0.15,
+						weight: 2,
+						interactive: false,
+					}).addTo(map);
+					
+					statusEl.textContent = 'Taxi data loaded successfully.';
+					statusEl.className = 'success';
+					lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+					
+				} catch (error) {
+					statusEl.textContent = `Error loading taxi data: ${error.message}`;
+					statusEl.className = 'error';
+					console.error(error);
+				} finally {
+					refreshBtn.disabled = false;
+					refreshBtn.classList.remove('loading');
+				}
+			}
+			
+			async function init() {
+				statusEl.textContent = 'Getting your location...';
+				statusEl.className = 'info';
+				userCoords = await getUserLocation();
+				
+				addOrUpdateUserMarker(userCoords);
+				map.setView(userCoords, 13);
+				statusEl.textContent = '';
+				updateRadius(parseFloat(radiusSlider.value));
+				
+				refreshBtn.addEventListener('click', fetchData);
+				radiusSlider.addEventListener('input', e => {
+					const val = parseFloat(e.target.value);
+					updateRadius(val);
+				});
+				
+				await fetchData();
+				
+				setInterval(fetchData, 180000);
+				
+				if (!sessionStorage.getItem('taxiMapOnboarded')) {
+					alert('Use the slider to adjust the search radius and find available taxis near you. Click Refresh Data to update manually.');
+					sessionStorage.setItem('taxiMapOnboarded', 'true');
+				}
+			}
+			
+			init();
+		})();
+	</script>
+	
 </body>
 </html>
